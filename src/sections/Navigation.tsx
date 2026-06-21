@@ -111,7 +111,7 @@ export default function Navigation() {
 
           <div className="hidden md:flex items-center gap-4">
             <a
-              href="tel:4077910227"
+              href="tel:+1-407-791-0227"
               className="flex items-center gap-2 text-white hover:text-crimson transition-colors duration-200 font-body text-[13px] uppercase tracking-[1.3px]"
             >
               <Phone size={14} />
@@ -174,7 +174,7 @@ export default function Navigation() {
             </button>
           </div>
           <a
-            href="tel:4077910227"
+            href="tel:+1-407-791-0227"
             className="flex items-center gap-3 text-white font-body text-lg"
           >
             <Phone size={20} />

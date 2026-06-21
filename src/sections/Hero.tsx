@@ -147,7 +147,7 @@ export default function Hero() {
           </a>
 
           <a
-            href="tel:4077910227"
+            href="tel:+1-407-791-0227"
             className="inline-flex items-center gap-2 border border-dark-mist text-[#F0F2F5] font-body text-[14px] font-medium uppercase tracking-[2.8px] px-6 py-4 rounded-full hover:border-crimson hover:text-crimson transition-all duration-300"
           >
             <Phone size={16} />

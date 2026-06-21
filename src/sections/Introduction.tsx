@@ -157,7 +157,7 @@ export default function Introduction() {
                 CALL PAUL DIRECTLY
               </p>
               <a
-                href="tel:4077910227"
+                href="tel:+1-407-791-0227"
                 className="font-display text-[48px] md:text-[60px] text-[#F0F2F5] hover:text-crimson transition-colors leading-none"
               >
                 (407) 791-0227

@@ -163,7 +163,7 @@ export default function QuoteRequest() {
 
             <div className="space-y-4">
               <a
-                href="tel:4077910227"
+                href="tel:+1-407-791-0227"
                 className="flex items-center gap-3 text-[#F0F2F5] hover:text-crimson transition-colors"
               >
                 <Phone size={18} />
