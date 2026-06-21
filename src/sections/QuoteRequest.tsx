@@ -33,6 +33,7 @@ export default function QuoteRequest() {
   const createLead = trpc.leads.create.useMutation({
     onSuccess: () => {
       setSubmitted(true);
+      console.log('Quote request submitted successfully');
       setFormData({
         fullName: '',
         email: '',
@@ -41,6 +42,9 @@ export default function QuoteRequest() {
         message: '',
       });
     },
+    onError: (error) => {
+      console.error('Quote request failed:', error);
+    }
   });
 
   const [submitted, setSubmitted] = useState(false);
