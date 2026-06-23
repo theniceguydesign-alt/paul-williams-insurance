@@ -1,75 +1,27 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 12%;
-    --card: 0 0% 96%;
-    --card-foreground: 0 0% 12%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 12%;
-    --primary: 172 100% 43%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 9 100% 61%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 0 0% 64%;
-    --muted-foreground: 0 0% 42%;
-    --accent: 172 100% 43%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 89%;
-    --input: 0 0% 94%;
-    --ring: 172 100% 43%;
-    --radius: 0.5rem;
-  }
-
-  body {
-    @apply bg-white text-neutral-900 font-body antialiased;
-    overflow-x: hidden;
-  }
-
-  h1, h2, h3, h4, h5, h6 {
-    @apply font-display font-bold leading-tight tracking-tight;
-  }
-
-  h1 {
-    @apply text-5xl;
-  }
-
-  h2 {
-    @apply text-4xl;
-  }
-
-  h3 {
-    @apply text-3xl;
-  }
-
-  h4 {
-    @apply text-2xl;
-  }
-
-  h5 {
-    @apply text-xl;
-  }
-
-  h6 {
-    @apply text-lg;
-  }
-
-  ::selection {
-    background-color: rgba(45, 212, 191, 0.2);
-    color: #1F2937;
-  }
+:root {
+  --navy: #0a1628;
+  --navy-mid: #122040;
+  --gold: #c9a227;
+  --gold-light: #e8c547;
+  --white: #ffffff;
+  --gray-light: #f4f6f9;
+  --text-muted: #8a9bb5;
 }
 
-@layer components {
-  .text-gradient {
-    background: linear-gradient(135deg, #0F766E 0%, #2DD4BF 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--white);
+  color: var(--navy);
+  line-height: 1.6;
 }
+
+a { text-decoration: none; color: inherit; }
+
+.lenis.lenis-smooth { scroll-behavior: auto; }
+.lenis.lenis-smooth [data-lenis-prevent] { overscroll-behavior: contain; }
