@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '@/hooks/useAuth';
-import { trpc } from '@/providers/trpc';
+import { supabase } from '@/lib/supabase';
 import {
   Users, MessageSquare, TrendingUp, Clock, ChevronLeft, ChevronRight,
   Search, Phone, Mail, Calendar, Shield, LogOut, ArrowUpRight,
@@ -42,60 +42,95 @@ export default function Admin() {
   const [intakesSearch, setIntakesSearch] = useState('');
   const [selectedIntake, setSelectedIntake] = useState<number | null>(null);
 
-  const { data: statsData } = trpc.stats.get.useQuery(undefined, {
-    enabled: isAuthenticated,
-  });
+  // --- Supabase data state ---
+  const [leads, setLeads] = useState<any[]>([]);
+  const [intakes, setIntakes] = useState<any[]>([]);
+  const [selectedIntakeData, setSelectedIntakeData] = useState<any>(null);
+  const [leadsLoading, setLeadsLoading] = useState(false);
+  const [intakesLoading, setIntakesLoading] = useState(false);
+  const [leadsPagination, setLeadsPagination] = useState({ page: 1, totalPages: 1, total: 0 });
+  const [intakesPagination, setIntakesPagination] = useState({ page: 1, totalPages: 1, total: 0 });
+  const [stats, setStats] = useState<any>(null);
+  const [intakeStats, setIntakeStats] = useState<any>(null);
 
-  const { data: intakeStatsData } = trpc.intake.stats.useQuery(undefined, {
-    enabled: isAuthenticated,
-  });
+  const fetchLeads = useCallback(async () => {
+    if (!isAuthenticated) return;
+    setLeadsLoading(true);
+    const from = (leadsPage - 1) * 10;
+    let q = supabase.from('leads').select('*', { count: 'exact' }).order('created_at', { ascending: false }).range(from, from + 9);
+    if (leadsStatusFilter) q = q.eq('status', leadsStatusFilter);
+    const { data, count } = await q;
+    setLeads(data ?? []);
+    setLeadsPagination({ page: leadsPage, total: count ?? 0, totalPages: Math.ceil((count ?? 0) / 10) });
+    setLeadsLoading(false);
+  }, [isAuthenticated, leadsPage, leadsStatusFilter]);
 
-  const { data: leadsData, isLoading: leadsLoading } = trpc.leads.list.useQuery(
-    {
-      page: leadsPage,
-      limit: 10,
-      status: leadsStatusFilter as 'new' | 'contacted' | 'quoted' | 'bound' | 'lost' | undefined,
-      search: leadsSearch || undefined,
-    },
-    { enabled: isAuthenticated && (activeTab === 'leads' || activeTab === 'overview') }
-  );
+  const fetchIntakes = useCallback(async () => {
+    if (!isAuthenticated) return;
+    setIntakesLoading(true);
+    const from = (intakesPage - 1) * 10;
+    let q = supabase.from('intake_submissions').select('*', { count: 'exact' }).order('created_at', { ascending: false }).range(from, from + 9);
+    if (intakesStatusFilter) q = q.eq('status', intakesStatusFilter);
+    const { data, count } = await q;
+    setIntakes(data ?? []);
+    setIntakesPagination({ page: intakesPage, total: count ?? 0, totalPages: Math.ceil((count ?? 0) / 10) });
+    setIntakesLoading(false);
+  }, [isAuthenticated, intakesPage, intakesStatusFilter]);
 
-  const { data: intakesData, isLoading: intakesLoading } = trpc.intake.list.useQuery(
-    {
-      page: intakesPage,
-      limit: 10,
-      status: intakesStatusFilter as 'new' | 'in_review' | 'submitted_to_carrier' | 'quoted' | 'bound' | 'declined' | undefined,
-      search: intakesSearch || undefined,
-    },
-    { enabled: isAuthenticated && (activeTab === 'intakes' || activeTab === 'overview') }
-  );
+  const fetchStats = useCallback(async () => {
+    if (!isAuthenticated) return;
+    const { data: leadsAll } = await supabase.from('leads').select('status');
+    const { data: intakesAll } = await supabase.from('intake_submissions').select('status');
+    if (leadsAll) {
+      const statusMap: Record<string, number> = {};
+      leadsAll.forEach(r => { statusMap[r.status] = (statusMap[r.status] || 0) + 1; });
+      setStats({ totalLeads: leadsAll.length, newLeads: statusMap['new'] ?? 0, contactedLeads: statusMap['contacted'] ?? 0, quotedLeads: statusMap['quoted'] ?? 0, boundLeads: statusMap['bound'] ?? 0, lostLeads: statusMap['lost'] ?? 0 });
+    }
+    if (intakesAll) {
+      const iMap: Record<string, number> = {};
+      intakesAll.forEach(r => { iMap[r.status] = (iMap[r.status] || 0) + 1; });
+      setIntakeStats({ total: intakesAll.length, new: iMap['new'] ?? 0, inReview: iMap['in_review'] ?? 0, pending: iMap['pending'] ?? 0 });
+    }
+  }, [isAuthenticated]);
 
-  const { data: selectedIntakeData } = trpc.intake.getById.useQuery(
-    { id: selectedIntake! },
-    { enabled: !!selectedIntake && isAuthenticated }
-  );
+  useEffect(() => { fetchLeads(); }, [fetchLeads]);
+  useEffect(() => { fetchIntakes(); }, [fetchIntakes]);
+  useEffect(() => { fetchStats(); }, [fetchStats]);
 
-  const utils = trpc.useUtils();
+  useEffect(() => {
+    if (selectedIntake) {
+      supabase.from('intake_submissions').select('*').eq('id', selectedIntake).single().then(({ data }) => setSelectedIntakeData(data));
+    }
+  }, [selectedIntake]);
 
-  const updateLead = trpc.leads.update.useMutation({
-    onSuccess: () => { utils.leads.list.invalidate(); utils.stats.get.invalidate(); },
-  });
+  const updateLead = { mutate: async ({ id, status }: { id: any; status: string }) => {
+    await supabase.from('leads').update({ status }).eq('id', id);
+    fetchLeads(); fetchStats();
+  }, isPending: false };
 
-  const deleteLead = trpc.leads.delete.useMutation({
-    onSuccess: () => { utils.leads.list.invalidate(); utils.stats.get.invalidate(); },
-  });
+  const deleteLead = { mutate: async ({ id }: { id: any }) => {
+    await supabase.from('leads').delete().eq('id', id);
+    fetchLeads(); fetchStats();
+  }, isPending: false };
 
-  const updateIntakeStatus = trpc.intake.updateStatus.useMutation({
-    onSuccess: () => { utils.intake.list.invalidate(); utils.intake.stats.invalidate(); },
-  });
+  const updateIntakeStatus = { mutate: async ({ id, status }: { id: any; status: string }) => {
+    await supabase.from('intake_submissions').update({ status }).eq('id', id);
+    fetchIntakes(); fetchStats();
+  }, isPending: false };
 
-  const addIntakeNotes = trpc.intake.addNotes.useMutation({
-    onSuccess: () => { utils.intake.getById.invalidate(); utils.intake.list.invalidate(); },
-  });
+  const addIntakeNotes = { mutate: async ({ id, notes }: { id: any; notes: string }) => {
+    await supabase.from('intake_submissions').update({ internal_notes: notes }).eq('id', id);
+    if (selectedIntake) {
+      const { data } = await supabase.from('intake_submissions').select('*').eq('id', selectedIntake).single();
+      setSelectedIntakeData(data);
+    }
+    fetchIntakes();
+  }, isPending: false };
 
-  const deleteIntake = trpc.intake.delete.useMutation({
-    onSuccess: () => { utils.intake.list.invalidate(); utils.intake.stats.invalidate(); setSelectedIntake(null); },
-  });
+  const deleteIntake = { mutate: async ({ id }: { id: any }) => {
+    await supabase.from('intake_submissions').delete().eq('id', id);
+    setSelectedIntake(null); fetchIntakes(); fetchStats();
+  }, isPending: false };
 
   if (authLoading) {
     return (
@@ -107,12 +142,7 @@ export default function Admin() {
 
   if (!isAuthenticated) return null;
 
-  const stats = statsData?.data;
-  const intakeStats = intakeStatsData?.data;
-  const leads = leadsData?.data?.leads ?? [];
-  const leadsPagination = leadsData?.data?.pagination;
-  const intakes = intakesData?.data?.submissions ?? [];
-  const intakesPagination = intakesData?.data?.pagination;
+
 
   return (
     <div className="min-h-screen bg-neutral-50">

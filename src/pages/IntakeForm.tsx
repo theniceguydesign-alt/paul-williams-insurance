@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { trpc } from '@/providers/trpc';
+import { supabase } from '@/lib/supabase';
 import {
   ChevronLeft, ChevronRight, Check, Loader2, AlertCircle, CheckCircle2,
   User, Home, Car, Anchor, CircleDot, Gem, FileText
@@ -35,9 +35,8 @@ export default function IntakeForm() {
   const [errors, setErrors] = useState<Record<number, string>>({});
   const [submitted, setSubmitted] = useState(false);
 
-  const createIntake = trpc.intake.create.useMutation({
-    onSuccess: () => setSubmitted(true),
-  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const set = (field: string, value: string) => setForm(prev => ({ ...prev, [field]: value }));
   const get = (field: string) => form[field] || '';
@@ -56,7 +55,7 @@ export default function IntakeForm() {
   const next = () => { if (validateStep(step)) { setStep(s => Math.min(10, s + 1)); window.scrollTo({ top: 0 }); } };
   const back = () => { setStep(s => Math.max(1, s - 1)); window.scrollTo({ top: 0 }); };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validateStep(1)) { setStep(1); return; }
     const lines = [];
     if (get('lines_Home') === 'true') lines.push('Home');
@@ -68,20 +67,26 @@ export default function IntakeForm() {
     if (get('lines_Scheduled') === 'true') lines.push('Scheduled Property');
     if (get('lines_Renters') === 'true') lines.push('Renters');
 
-    createIntake.mutate({
-      primaryNamedInsured: get('primaryNamedInsured'),
-      dob: get('dob') || undefined,
-      primaryAddress: get('primaryAddress') || undefined,
-      riskAddress: get('riskAddress') || undefined,
+    setIsSubmitting(true);
+    setSubmitError('');
+    const nameParts = get('primaryNamedInsured').trim().split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+    const { error } = await supabase.from('intake_submissions').insert({
+      first_name: firstName,
+      last_name: lastName,
       email: get('email'),
       phone: get('phone'),
-      occupation: get('occupation') || undefined,
-      riskState: get('riskState') || 'FL',
-      linesIncluded: lines.length > 0 ? lines.join(', ') : 'Home, Auto',
-      formType: 'personal_lines',
-      priority: 'normal',
-      formData: form,
+      coverage_types: lines.length > 0 ? lines : ['Home', 'Auto'],
+      data: { ...form },
+      status: 'pending',
     });
+    setIsSubmitting(false);
+    if (error) {
+      setSubmitError(error.message || 'Submission failed. Please try again.');
+    } else {
+      setSubmitted(true);
+    }
   };
 
   const Checkbox = ({ field, label }: { field: string; label: string }) => (
@@ -638,9 +643,9 @@ export default function IntakeForm() {
               Next Section <ChevronRight size={16} />
             </button>
           ) : (
-            <button onClick={handleSubmit} disabled={createIntake.isPending}
+            <button onClick={handleSubmit} disabled={isSubmitting}
               className="flex items-center gap-2 px-8 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-semibold text-sm rounded-lg disabled:opacity-60 disabled:cursor-not-allowed transition-colors">
-              {createIntake.isPending ? <><Loader2 size={16} className="animate-spin" /> Submitting...</> : <>Submit Intake <Check size={16} /></>}
+              {isSubmitting ? <><Loader2 size={16} className="animate-spin" /> Submitting...</> : <>Submit Intake <Check size={16} /></>}
             </button>
           )}
         </div>

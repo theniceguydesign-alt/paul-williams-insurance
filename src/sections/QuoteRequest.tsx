@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { Phone, Mail, MapPin, Check, Loader2 } from 'lucide-react';
-import { trpc } from '@/providers/trpc';
+import { supabase } from '@/lib/supabase';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -30,24 +30,9 @@ export default function QuoteRequest() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const createLead = trpc.leads.create.useMutation({
-    onSuccess: () => {
-      setSubmitted(true);
-      console.log('Quote request submitted successfully');
-      setFormData({
-        fullName: '',
-        email: '',
-        phone: '',
-        insuranceType: '',
-        message: '',
-      });
-    },
-    onError: (error) => {
-      console.error('Quote request failed:', error);
-    }
-  });
-
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(false);
 
   useEffect(() => {
     const ctx = gsap.context(() => {
@@ -104,20 +89,24 @@ export default function QuoteRequest() {
     e.preventDefault();
     if (!validate()) return;
 
-    createLead.mutate({
-      fullName: formData.fullName,
+    setIsSubmitting(true);
+    setSubmitError(false);
+    const { error } = await supabase.from('leads').insert({
+      full_name: formData.fullName,
       email: formData.email,
       phone: formData.phone,
-      insuranceType: formData.insuranceType as
-        | 'Auto'
-        | 'Home'
-        | 'Renters'
-        | 'Life'
-        | 'Business'
-        | 'Boat/Recreational'
-        | 'Other',
-      message: formData.message || undefined,
+      coverage_type: formData.insuranceType,
+      message: formData.message || null,
+      status: 'new',
+      source: 'website',
     });
+    setIsSubmitting(false);
+    if (error) {
+      setSubmitError(true);
+    } else {
+      setSubmitted(true);
+      setFormData({ fullName: '', email: '', phone: '', insuranceType: '', message: '' });
+    }
   };
 
   const handleChange = (
@@ -332,10 +321,10 @@ export default function QuoteRequest() {
 
                   <button
                     type="submit"
-                    disabled={createLead.isPending}
+                    disabled={isSubmitting}
                     className="w-full bg-crimson text-[#F0F2F5] font-body text-[14px] font-medium uppercase tracking-[2.8px] py-4 rounded-lg hover:bg-arabian-red transition-colors duration-300 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                   >
-                    {createLead.isPending ? (
+                    {isSubmitting ? (
                       <>
                         <Loader2 size={18} className="animate-spin" />
                         Sending...
@@ -345,7 +334,7 @@ export default function QuoteRequest() {
                     )}
                   </button>
 
-                  {createLead.isError && (
+                  {submitError && (
                     <p className="text-crimson text-sm text-center font-body">
                       Something went wrong. Please try again or call us directly.
                     </p>
