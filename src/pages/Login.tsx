@@ -1,84 +1,67 @@
-import { useState } from 'react'
-import { Shield, Mail, CheckCircle } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Lock } from "lucide-react";
+
+function getOAuthUrl() {
+  const kimiAuthUrl = import.meta.env.VITE_KIMI_AUTH_URL;
+  const appID = import.meta.env.VITE_APP_ID;
+  const redirectUri = `${window.location.origin}/api/oauth/callback`;
+  const state = btoa(redirectUri);
+
+  const url = new URL(`${kimiAuthUrl}/api/oauth/authorize`);
+  url.searchParams.set("client_id", appID);
+  url.searchParams.set("redirect_uri", redirectUri);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("scope", "profile");
+  url.searchParams.set("state", state);
+
+  return url.toString();
+}
 
 export default function Login() {
-  const [email, setEmail] = useState('')
-  const [sent, setSent] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/admin`,
-      },
-    })
-
-    if (error) {
-      setError(error.message)
-    } else {
-      setSent(true)
-    }
-    setLoading(false)
-  }
-
   return (
-    <div className="min-h-screen bg-[#0a1628] flex items-center justify-center px-6">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <Shield className="text-[#c9a227]" size={32} />
+    <div className="min-h-screen bg-gradient-to-br from-white via-neutral-50 to-primary-50 flex items-center justify-center px-4 py-12">
+      <div className="w-full max-w-sm space-y-8">
+        {/* Logo/Brand section */}
+        <div className="text-center space-y-3">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-lg bg-primary-100">
+            <Lock className="w-7 h-7 text-primary-700" strokeWidth={1.5} />
           </div>
-          <h1 className="text-2xl font-bold text-white">Agent Portal</h1>
-          <p className="text-gray-400 mt-2 text-sm">Paul Williams Insurance Agency</p>
+          <div>
+            <h1 className="text-2xl font-bold text-neutral-900">Welcome Back</h1>
+            <p className="text-neutral-500 text-sm mt-1">Sign in to your account to continue</p>
+          </div>
         </div>
 
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-8">
-          {sent ? (
-            <div className="text-center">
-              <CheckCircle className="text-[#c9a227] mx-auto mb-4" size={40} />
-              <h2 className="text-white font-bold text-lg mb-2">Check your email</h2>
-              <p className="text-gray-400 text-sm">
-                We sent a login link to <span className="text-white">{email}</span>. Click it to access the dashboard.
-              </p>
-              <p className="text-gray-500 text-xs mt-4">No password required. Link expires in 1 hour.</p>
-            </div>
-          ) : (
-            <form onSubmit={handleLogin}>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
-              <div className="relative mb-4">
-                <Mail className="absolute left-3 top-3.5 text-gray-400" size={16} />
-                <input
-                  type="email" required value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="paul@paulwilliamsinsurance.com"
-                  className="w-full bg-white/10 border border-white/20 rounded-xl pl-10 pr-4 py-3 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-[#c9a227]"
-                />
-              </div>
-              {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
-              <button
-                type="submit" disabled={loading}
-                className="w-full bg-[#c9a227] text-[#0a1628] py-3 rounded-xl font-bold hover:bg-[#e8c547] disabled:opacity-60 transition-colors"
-              >
-                {loading ? 'Sending...' : 'Send Magic Link'}
-              </button>
-              <p className="text-gray-500 text-xs text-center mt-4">
-                No password needed — we email you a secure login link.
-              </p>
-            </form>
-          )}
-        </div>
+        {/* Login card */}
+        <Card className="shadow-lg border-neutral-200">
+          <CardHeader className="space-y-2">
+            <CardTitle className="text-neutral-900">Sign In</CardTitle>
+            <p className="text-sm text-neutral-500">Use your Kimi account to access the dashboard</p>
+          </CardHeader>
+          <CardContent>
+            <Button
+              className="w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold py-2.5 rounded-lg transition-colors h-11"
+              onClick={() => {
+                window.location.href = getOAuthUrl();
+              }}
+            >
+              Sign in with Kimi
+            </Button>
+            <p className="text-xs text-neutral-400 text-center mt-4">
+              By signing in, you agree to our terms of service and privacy policy.
+            </p>
+          </CardContent>
+        </Card>
 
-        <div className="text-center mt-6">
-          <a href="/" className="text-gray-500 text-sm hover:text-gray-300">← Back to website</a>
+        {/* Security note */}
+        <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
+          <p className="text-xs text-primary-800 flex items-center gap-2">
+            <Lock className="w-4 h-4" strokeWidth={2} />
+            Your login is secure and encrypted
+          </p>
         </div>
       </div>
     </div>
-  )
+  );
 }
