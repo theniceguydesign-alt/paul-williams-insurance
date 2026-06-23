@@ -1,67 +1,233 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Lock } from "lucide-react";
+import { useState, FormEvent } from 'react'
+import { createClient } from '@supabase/supabase-js'
 
-function getOAuthUrl() {
-  const kimiAuthUrl = import.meta.env.VITE_KIMI_AUTH_URL;
-  const appID = import.meta.env.VITE_APP_ID;
-  const redirectUri = `${window.location.origin}/api/oauth/callback`;
-  const state = btoa(redirectUri);
-
-  const url = new URL(`${kimiAuthUrl}/api/oauth/authorize`);
-  url.searchParams.set("client_id", appID);
-  url.searchParams.set("redirect_uri", redirectUri);
-  url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", "profile");
-  url.searchParams.set("state", state);
-
-  return url.toString();
-}
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+)
 
 export default function Login() {
+  const [email, setEmail] = useState('')
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+  const [message, setMessage] = useState('')
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!email.trim()) return
+
+    setStatus('loading')
+    setMessage('')
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: {
+        emailRedirectTo: window.location.origin + '/admin',
+      },
+    })
+
+    if (error) {
+      setStatus('error')
+      setMessage(error.message)
+    } else {
+      setStatus('success')
+      setMessage('Check your email for a login link.')
+      setEmail('')
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-neutral-50 to-primary-50 flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm space-y-8">
-        {/* Logo/Brand section */}
-        <div className="text-center space-y-3">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-lg bg-primary-100">
-            <Lock className="w-7 h-7 text-primary-700" strokeWidth={1.5} />
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px',
+        backgroundColor: '#F7F5F0',
+        fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+      }}
+    >
+      <div
+        style={{
+          width: '100%',
+          maxWidth: '420px',
+          backgroundColor: '#ffffff',
+          border: '1.5px solid rgba(19,22,27,0.10)',
+          borderRadius: '20px',
+          padding: '48px 36px',
+          boxShadow: '0 8px 40px rgba(19,22,27,0.06)',
+        }}
+      >
+        {/* Logo */}
+        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+          <div
+            style={{
+              width: '52px',
+              height: '52px',
+              borderRadius: '14px',
+              background: 'linear-gradient(135deg, rgba(45,212,191,0.15), rgba(45,212,191,0.05))',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px',
+              fontFamily: "'Space Grotesk', 'Bricolage Grotesque', sans-serif",
+              fontWeight: 700,
+              fontSize: '18px',
+              color: '#13161B',
+              letterSpacing: '0.5px',
+            }}
+          >
+            CS
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-neutral-900">Welcome Back</h1>
-            <p className="text-neutral-500 text-sm mt-1">Sign in to your account to continue</p>
-          </div>
-        </div>
-
-        {/* Login card */}
-        <Card className="shadow-lg border-neutral-200">
-          <CardHeader className="space-y-2">
-            <CardTitle className="text-neutral-900">Sign In</CardTitle>
-            <p className="text-sm text-neutral-500">Use your Kimi account to access the dashboard</p>
-          </CardHeader>
-          <CardContent>
-            <Button
-              className="w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold py-2.5 rounded-lg transition-colors h-11"
-              onClick={() => {
-                window.location.href = getOAuthUrl();
-              }}
-            >
-              Sign in with Kimi
-            </Button>
-            <p className="text-xs text-neutral-400 text-center mt-4">
-              By signing in, you agree to our terms of service and privacy policy.
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Security note */}
-        <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
-          <p className="text-xs text-primary-800 flex items-center gap-2">
-            <Lock className="w-4 h-4" strokeWidth={2} />
-            Your login is secure and encrypted
+          <h1
+            style={{
+              fontFamily: "'Space Grotesk', 'Bricolage Grotesque', sans-serif",
+              fontWeight: 700,
+              fontSize: '22px',
+              color: '#13161B',
+              letterSpacing: '-0.02em',
+              marginBottom: '6px',
+            }}
+          >
+            Crestlake Studio
+          </h1>
+          <p
+            style={{
+              fontSize: '14px',
+              color: '#5B6472',
+              margin: 0,
+            }}
+          >
+            Admin Portal
           </p>
         </div>
+
+        {/* Status Messages */}
+        {status === 'success' && (
+          <div
+            style={{
+              backgroundColor: 'rgba(45,212,191,0.10)',
+              border: '1px solid rgba(45,212,191,0.30)',
+              borderRadius: '12px',
+              padding: '14px 16px',
+              marginBottom: '20px',
+              fontSize: '14px',
+              color: '#0D9488',
+              fontWeight: 500,
+              lineHeight: 1.5,
+            }}
+          >
+            {message}
+          </div>
+        )}
+
+        {status === 'error' && (
+          <div
+            style={{
+              backgroundColor: 'rgba(239,68,68,0.08)',
+              border: '1px solid rgba(239,68,68,0.25)',
+              borderRadius: '12px',
+              padding: '14px 16px',
+              marginBottom: '20px',
+              fontSize: '14px',
+              color: '#dc2626',
+              fontWeight: 500,
+              lineHeight: 1.5,
+            }}
+          >
+            {message}
+          </div>
+        )}
+
+        {/* Form */}
+        <form onSubmit={handleSubmit}>
+          <label
+            htmlFor="email"
+            style={{
+              display: 'block',
+              fontSize: '13px',
+              fontWeight: 500,
+              color: '#13161B',
+              marginBottom: '8px',
+              letterSpacing: '0.02em',
+            }}
+          >
+            Email Address
+          </label>
+          <input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@yourbusiness.com"
+            required
+            disabled={status === 'loading'}
+            style={{
+              width: '100%',
+              padding: '14px 16px',
+              fontSize: '15px',
+              fontFamily: "'Inter', system-ui, sans-serif",
+              color: '#13161B',
+              backgroundColor: '#F7F5F0',
+              border: '1.5px solid rgba(19,22,27,0.10)',
+              borderRadius: '12px',
+              outline: 'none',
+              boxSizing: 'border-box',
+              transition: 'border-color 0.2s ease',
+              marginBottom: '20px',
+            }}
+            onFocus={(e) => {
+              e.target.style.borderColor = '#2DD4BF'
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = 'rgba(19,22,27,0.10)'
+            }}
+          />
+
+          <button
+            type="submit"
+            disabled={status === 'loading' || !email.trim()}
+            style={{
+              width: '100%',
+              padding: '15px 24px',
+              fontSize: '14px',
+              fontFamily: "'Inter', system-ui, sans-serif",
+              fontWeight: 600,
+              color: '#13161B',
+              backgroundColor: '#2DD4BF',
+              border: 'none',
+              borderRadius: '12px',
+              cursor: status === 'loading' ? 'wait' : 'pointer',
+              opacity: status === 'loading' || !email.trim() ? 0.6 : 1,
+              transition: 'all 0.2s ease',
+              letterSpacing: '0.01em',
+            }}
+            onMouseEnter={(e) => {
+              if (status !== 'loading' && email.trim()) {
+                e.currentTarget.style.backgroundColor = '#14B8A6'
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#2DD4BF'
+            }}
+          >
+            {status === 'loading' ? 'Sending...' : 'Send Login Link'}
+          </button>
+        </form>
+
+        {/* Footer */}
+        <p
+          style={{
+            textAlign: 'center',
+            fontSize: '13px',
+            color: '#9CA3AF',
+            marginTop: '24px',
+            lineHeight: 1.5,
+          }}
+        >
+          We'll email you a secure login link. No password needed.
+        </p>
       </div>
     </div>
-  );
+  )
 }
