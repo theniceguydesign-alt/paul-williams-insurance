@@ -1,575 +1,404 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router';
-import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/lib/supabase';
-import {
-  Users, MessageSquare, TrendingUp, Clock, ChevronLeft, ChevronRight,
-  Search, Phone, Mail, Calendar, Shield, LogOut, ArrowUpRight,
-  AlertCircle, FileText, BarChart3, Inbox, CheckCircle2
-} from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 
-const statusColors: Record<string, string> = {
-  new: 'bg-secondary-50 text-secondary-700 border border-secondary-200',
-  contacted: 'bg-primary-50 text-primary-700 border border-primary-200',
-  quoted: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  bound: 'bg-emerald-100 text-emerald-800 border border-emerald-300',
-  lost: 'bg-neutral-100 text-neutral-700 border border-neutral-200',
-};
+interface Lead {
+  id: string
+  created_at: string
+  full_name: string
+  email: string
+  phone: string
+  coverage_type: string
+  message: string
+  status: string
+  source: string
+}
 
-const intakeStatusColors: Record<string, string> = {
-  new: 'bg-secondary-50 text-secondary-700 border border-secondary-200',
-  in_review: 'bg-primary-50 text-primary-700 border border-primary-200',
-  submitted_to_carrier: 'bg-amber-50 text-amber-700 border border-amber-200',
-  quoted: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  bound: 'bg-emerald-100 text-emerald-800 border border-emerald-300',
-  declined: 'bg-neutral-100 text-neutral-700 border border-neutral-200',
-};
-
-type Tab = 'overview' | 'leads' | 'intakes';
+interface IntakeSubmission {
+  id: string
+  created_at: string
+  first_name: string
+  last_name: string
+  email: string
+  phone: string
+  coverage_types: string[]
+  status: string
+  internal_notes: string | null
+  data: Record<string, unknown>
+}
 
 export default function Admin() {
-  const navigate = useNavigate();
-  const { user, isLoading: authLoading, isAuthenticated, logout } = useAuth({
-    redirectOnUnauthenticated: true,
-  });
+  const navigate = useNavigate()
+  const [session, setSession] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<'leads' | 'intake'>('leads')
+  const [leads, setLeads] = useState<Lead[]>([])
+  const [intakes, setIntakes] = useState<IntakeSubmission[]>([])
+  const [stats, setStats] = useState({ total: 0, new: 0, contacted: 0, closed: 0, intakeTotal: 0 })
+  const [error, setError] = useState('')
 
-  const [activeTab, setActiveTab] = useState<Tab>('overview');
-  const [leadsPage, setLeadsPage] = useState(1);
-  const [leadsStatusFilter, setLeadsStatusFilter] = useState('');
-  const [leadsSearch, setLeadsSearch] = useState('');
-  const [intakesPage, setIntakesPage] = useState(1);
-  const [intakesStatusFilter, setIntakesStatusFilter] = useState('');
-  const [intakesSearch, setIntakesSearch] = useState('');
-  const [selectedIntake, setSelectedIntake] = useState<number | null>(null);
+  // Auth guard
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) {
+        navigate('/login')
+        return
+      }
+      setSession(session)
+      setLoading(false)
+    })
 
-  // --- Supabase data state ---
-  const [leads, setLeads] = useState<any[]>([]);
-  const [intakes, setIntakes] = useState<any[]>([]);
-  const [selectedIntakeData, setSelectedIntakeData] = useState<any>(null);
-  const [leadsLoading, setLeadsLoading] = useState(false);
-  const [intakesLoading, setIntakesLoading] = useState(false);
-  const [leadsPagination, setLeadsPagination] = useState({ page: 1, totalPages: 1, total: 0 });
-  const [intakesPagination, setIntakesPagination] = useState({ page: 1, totalPages: 1, total: 0 });
-  const [stats, setStats] = useState<any>(null);
-  const [intakeStats, setIntakeStats] = useState<any>(null);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) navigate('/login')
+      setSession(session)
+    })
 
-  const fetchLeads = useCallback(async () => {
-    if (!isAuthenticated) return;
-    setLeadsLoading(true);
-    const from = (leadsPage - 1) * 10;
-    let q = supabase.from('leads').select('*', { count: 'exact' }).order('created_at', { ascending: false }).range(from, from + 9);
-    if (leadsStatusFilter) q = q.eq('status', leadsStatusFilter);
-    const { data, count } = await q;
-    setLeads(data ?? []);
-    setLeadsPagination({ page: leadsPage, total: count ?? 0, totalPages: Math.ceil((count ?? 0) / 10) });
-    setLeadsLoading(false);
-  }, [isAuthenticated, leadsPage, leadsStatusFilter]);
+    return () => subscription.unsubscribe()
+  }, [navigate])
 
-  const fetchIntakes = useCallback(async () => {
-    if (!isAuthenticated) return;
-    setIntakesLoading(true);
-    const from = (intakesPage - 1) * 10;
-    let q = supabase.from('intake_submissions').select('*', { count: 'exact' }).order('created_at', { ascending: false }).range(from, from + 9);
-    if (intakesStatusFilter) q = q.eq('status', intakesStatusFilter);
-    const { data, count } = await q;
-    setIntakes(data ?? []);
-    setIntakesPagination({ page: intakesPage, total: count ?? 0, totalPages: Math.ceil((count ?? 0) / 10) });
-    setIntakesLoading(false);
-  }, [isAuthenticated, intakesPage, intakesStatusFilter]);
+  const fetchData = useCallback(async () => {
+    if (!session) return
+    setError('')
 
-  const fetchStats = useCallback(async () => {
-    if (!isAuthenticated) return;
-    const { data: leadsAll } = await supabase.from('leads').select('status');
-    const { data: intakesAll } = await supabase.from('intake_submissions').select('status');
-    if (leadsAll) {
-      const statusMap: Record<string, number> = {};
-      leadsAll.forEach(r => { statusMap[r.status] = (statusMap[r.status] || 0) + 1; });
-      setStats({ totalLeads: leadsAll.length, newLeads: statusMap['new'] ?? 0, contactedLeads: statusMap['contacted'] ?? 0, quotedLeads: statusMap['quoted'] ?? 0, boundLeads: statusMap['bound'] ?? 0, lostLeads: statusMap['lost'] ?? 0 });
+    // Fetch leads
+    const { data: leadsData, error: leadsError } = await supabase
+      .from('leads')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (leadsError) {
+      setError(leadsError.message)
+      return
     }
-    if (intakesAll) {
-      const iMap: Record<string, number> = {};
-      intakesAll.forEach(r => { iMap[r.status] = (iMap[r.status] || 0) + 1; });
-      setIntakeStats({ total: intakesAll.length, new: iMap['new'] ?? 0, inReview: iMap['in_review'] ?? 0, pending: iMap['pending'] ?? 0 });
-    }
-  }, [isAuthenticated]);
+    setLeads(leadsData || [])
 
-  useEffect(() => { fetchLeads(); }, [fetchLeads]);
-  useEffect(() => { fetchIntakes(); }, [fetchIntakes]);
-  useEffect(() => { fetchStats(); }, [fetchStats]);
+    // Fetch intake submissions
+    const { data: intakeData, error: intakeError } = await supabase
+      .from('intake_submissions')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (intakeError) {
+      setError(intakeError.message)
+      return
+    }
+    setIntakes(intakeData || [])
+
+    // Calculate stats client-side
+    const allLeads = leadsData || []
+    setStats({
+      total: allLeads.length,
+      new: allLeads.filter((l) => l.status === 'new').length,
+      contacted: allLeads.filter((l) => l.status === 'contacted').length,
+      closed: allLeads.filter((l) => l.status === 'closed').length,
+      intakeTotal: (intakeData || []).length,
+    })
+  }, [session])
 
   useEffect(() => {
-    if (selectedIntake) {
-      supabase.from('intake_submissions').select('*').eq('id', selectedIntake).single().then(({ data }) => setSelectedIntakeData(data));
+    if (session) fetchData()
+  }, [session, fetchData])
+
+  const updateLeadStatus = async (id: string, status: string) => {
+    const { error } = await supabase.from('leads').update({ status }).eq('id', id)
+    if (error) {
+      setError(error.message)
+    } else {
+      setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, status } : l)))
+      fetchData()
     }
-  }, [selectedIntake]);
-
-  const updateLead = { mutate: async ({ id, status }: { id: any; status: string }) => {
-    await supabase.from('leads').update({ status }).eq('id', id);
-    fetchLeads(); fetchStats();
-  }, isPending: false };
-
-  const deleteLead = { mutate: async ({ id }: { id: any }) => {
-    await supabase.from('leads').delete().eq('id', id);
-    fetchLeads(); fetchStats();
-  }, isPending: false };
-
-  const updateIntakeStatus = { mutate: async ({ id, status }: { id: any; status: string }) => {
-    await supabase.from('intake_submissions').update({ status }).eq('id', id);
-    fetchIntakes(); fetchStats();
-  }, isPending: false };
-
-  const addIntakeNotes = { mutate: async ({ id, notes }: { id: any; notes: string }) => {
-    await supabase.from('intake_submissions').update({ internal_notes: notes }).eq('id', id);
-    if (selectedIntake) {
-      const { data } = await supabase.from('intake_submissions').select('*').eq('id', selectedIntake).single();
-      setSelectedIntakeData(data);
-    }
-    fetchIntakes();
-  }, isPending: false };
-
-  const deleteIntake = { mutate: async ({ id }: { id: any }) => {
-    await supabase.from('intake_submissions').delete().eq('id', id);
-    setSelectedIntake(null); fetchIntakes(); fetchStats();
-  }, isPending: false };
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-      </div>
-    );
   }
 
-  if (!isAuthenticated) return null;
+  const updateIntakeStatus = async (id: string, status: string) => {
+    const { error } = await supabase.from('intake_submissions').update({ status }).eq('id', id)
+    if (error) {
+      setError(error.message)
+    } else {
+      setIntakes((prev) => prev.map((i) => (i.id === id ? { ...i, status } : i)))
+      fetchData()
+    }
+  }
 
+  const updateIntakeNotes = async (id: string, notes: string) => {
+    const { error } = await supabase.from('intake_submissions').update({ internal_notes: notes }).eq('id', id)
+    if (error) {
+      setError(error.message)
+    } else {
+      setIntakes((prev) => prev.map((i) => (i.id === id ? { ...i, internal_notes: notes } : i)))
+    }
+  }
 
+  const deleteLead = async (id: string) => {
+    if (!confirm('Delete this lead?')) return
+    const { error } = await supabase.from('leads').delete().eq('id', id)
+    if (error) {
+      setError(error.message)
+    } else {
+      setLeads((prev) => prev.filter((l) => l.id !== id))
+      fetchData()
+    }
+  }
+
+  const deleteIntake = async (id: string) => {
+    if (!confirm('Delete this intake submission?')) return
+    const { error } = await supabase.from('intake_submissions').delete().eq('id', id)
+    if (error) {
+      setError(error.message)
+    } else {
+      setIntakes((prev) => prev.filter((i) => i.id !== id))
+      fetchData()
+    }
+  }
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    navigate('/login')
+  }
+
+  const formatDate = (dateStr: string) =>
+    new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+
+  const statusBadge = (status: string) => {
+    const colors: Record<string, string> = {
+      new: 'bg-[rgba(45,212,191,0.12)] text-[#0D9488]',
+      contacted: 'bg-[rgba(232,176,75,0.12)] text-[#92400E]',
+      closed: 'bg-[rgba(34,197,94,0.12)] text-[#15803D]',
+      lost: 'bg-[rgba(239,68,68,0.08)] text-[#DC2626]',
+      pending: 'bg-[rgba(245,158,11,0.10)] text-[#B45309]',
+      approved: 'bg-[rgba(34,197,94,0.12)] text-[#15803D]',
+      declined: 'bg-[rgba(239,68,68,0.08)] text-[#DC2626]',
+    }
+    return (
+      <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${colors[status] || 'bg-gray-100 text-gray-600'}`}>
+        {status}
+      </span>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#F7F5F0] flex items-center justify-center">
+        <div className="text-sm text-[#5B6472]">Loading...</div>
+      </div>
+    )
+  }
 
   return (
-    <div className="min-h-screen bg-neutral-50">
+    <div className="min-h-screen bg-[#F7F5F0]">
       {/* Header */}
-      <header className="bg-white border-b border-neutral-200 sticky top-0 z-40 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/')} className="flex items-center gap-2 text-neutral-600 hover:text-neutral-900 transition-colors">
-              <ChevronLeft size={18} />
-              <span className="font-body text-sm font-medium">Back to Site</span>
-            </button>
-            <div className="w-px h-5 bg-neutral-200" />
-            <span className="font-semibold text-neutral-900">Paul Williams <span className="text-primary-600">Dashboard</span></span>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Shield size={16} className="text-primary-600" />
-              <span className="font-body text-sm font-medium text-neutral-900">{user?.name || 'Admin'}</span>
+      <header className="bg-white border-b border-[rgba(19,22,27,0.08)] px-6 py-4">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-[rgba(45,212,191,0.12)] flex items-center justify-center font-bold text-sm text-[#13161B]">
+              CS
             </div>
-            <button onClick={logout} className="p-2 hover:bg-neutral-100 rounded-lg transition-colors" title="Logout">
-              <LogOut size={18} className="text-neutral-600 hover:text-neutral-900" />
-            </button>
+            <h1 className="text-lg font-bold text-[#13161B]">Crestlake Studio — Admin</h1>
           </div>
+          <button
+            onClick={handleLogout}
+            className="text-sm text-[#5B6472] hover:text-[#13161B] transition-colors"
+          >
+            Sign Out
+          </button>
         </div>
       </header>
 
-      {/* Tabs */}
-      <div className="bg-white border-b border-neutral-200 sticky top-16 z-30">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex gap-0">
-            {[
-              { id: 'overview' as Tab, label: 'Overview', icon: BarChart3 },
-              { id: 'leads' as Tab, label: 'Quote Leads', icon: Users },
-              { id: 'intakes' as Tab, label: 'Intake Forms', icon: FileText },
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-6 py-4 font-body text-sm font-medium border-b-2 transition-colors ${
-                  activeTab === tab.id
-                    ? 'border-primary-600 text-neutral-900'
-                    : 'border-transparent text-neutral-600 hover:text-neutral-900'
-                }`}
-              >
-                <tab.icon size={18} />
-                {tab.label}
-              </button>
-            ))}
+      <main className="max-w-6xl mx-auto px-6 py-8">
+        {error && (
+          <div className="mb-5 p-3.5 rounded-xl bg-[rgba(239,68,68,0.08)] border border-[rgba(239,68,68,0.25)] text-[#dc2626] text-sm font-medium">
+            {error}
           </div>
-        </div>
-      </div>
-
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        {/* ===== OVERVIEW TAB ===== */}
-        {activeTab === 'overview' && (
-          <>
-            {/* Combined Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-8">
-              <StatCard label="Total Leads" value={stats?.totalLeads ?? 0} icon={<Users size={18} />} />
-              <StatCard label="New Leads" value={stats?.newLeads ?? 0} icon={<AlertCircle size={18} />} highlight />
-              <StatCard label="Bound Leads" value={stats?.boundLeads ?? 0} icon={<Shield size={18} />} />
-              <StatCard label="Unread Msgs" value={stats?.unreadMessages ?? 0} icon={<Inbox size={18} />} highlight={(stats?.unreadMessages ?? 0) > 0} />
-              <StatCard label="Total Intakes" value={intakeStats?.total ?? 0} icon={<FileText size={18} />} />
-              <StatCard label="New Intakes" value={intakeStats?.new ?? 0} icon={<AlertCircle size={18} />} highlight />
-              <StatCard label="In Review" value={intakeStats?.inReview ?? 0} icon={<Clock size={18} />} />
-              <StatCard label="Bound Intakes" value={intakeStats?.bound ?? 0} icon={<CheckCircle2 size={18} />} />
-            </div>
-
-            {/* Recent Activity */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Recent Leads */}
-              <div className="bg-white border border-neutral-200 rounded-lg overflow-hidden">
-                <div className="px-6 py-4 border-b border-neutral-200 flex items-center justify-between">
-                  <h3 className="font-semibold uppercase tracking-wide text-xs text-neutral-700">Recent Quote Leads</h3>
-                  <button onClick={() => setActiveTab('leads')} className="text-primary-600 hover:text-primary-700 font-body text-xs font-medium">View All</button>
-                </div>
-                <div className="divide-y divide-neutral-200">
-                  {leads.slice(0, 5).map(lead => (
-                    <div key={lead.id} className="px-6 py-4 flex items-center justify-between hover:bg-neutral-50 transition-colors">
-                      <div>
-                        <p className="font-body text-sm font-medium text-neutral-900">{lead.fullName}</p>
-                        <p className="font-body text-xs text-neutral-500">{lead.insuranceType} — {lead.email}</p>
-                      </div>
-                      <span className={`text-xs px-2.5 py-1 rounded font-medium ${statusColors[lead.status]}`}>{lead.status}</span>
-                    </div>
-                  ))}
-                  {leads.length === 0 && <p className="px-6 py-8 text-center font-body text-sm text-neutral-500">No leads yet</p>}
-                </div>
-              </div>
-
-              {/* Recent Intakes */}
-              <div className="bg-white border border-neutral-200 rounded-lg overflow-hidden">
-                <div className="px-6 py-4 border-b border-neutral-200 flex items-center justify-between">
-                  <h3 className="font-semibold uppercase tracking-wide text-xs text-neutral-700">Recent Intake Forms</h3>
-                  <button onClick={() => setActiveTab('intakes')} className="text-primary-600 hover:text-primary-700 font-body text-xs font-medium">View All</button>
-                </div>
-                <div className="divide-y divide-neutral-200">
-                  {intakes.slice(0, 5).map(intake => (
-                    <div key={intake.id} className="px-6 py-4 flex items-center justify-between hover:bg-neutral-50 transition-colors">
-                      <div>
-                        <p className="font-body text-sm font-medium text-neutral-900">{intake.primaryNamedInsured}</p>
-                        <p className="font-body text-xs text-neutral-500">{intake.linesIncluded} — {intake.email}</p>
-                      </div>
-                      <span className={`text-xs px-2.5 py-1 rounded font-medium ${intakeStatusColors[intake.status]}`}>{intake.status.replace(/_/g, ' ')}</span>
-                    </div>
-                  ))}
-                  {intakes.length === 0 && <p className="px-6 py-8 text-center font-body text-sm text-neutral-500">No intake forms yet</p>}
-                </div>
-              </div>
-            </div>
-          </>
         )}
 
-        {/* ===== LEADS TAB ===== */}
+        {/* Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-8">
+          {[
+            { label: 'Total Leads', value: stats.total },
+            { label: 'New', value: stats.new },
+            { label: 'Contacted', value: stats.contacted },
+            { label: 'Closed', value: stats.closed },
+            { label: 'Intakes', value: stats.intakeTotal },
+          ].map((s) => (
+            <div key={s.label} className="bg-white rounded-xl border border-[rgba(19,22,27,0.08)] p-4 text-center">
+              <div className="text-2xl font-bold text-[#13161B]">{s.value}</div>
+              <div className="text-xs text-[#5B6472] mt-0.5">{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-1 mb-6 bg-white rounded-xl border border-[rgba(19,22,27,0.08)] p-1 inline-flex">
+          <button
+            onClick={() => setActiveTab('leads')}
+            className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === 'leads' ? 'bg-[#13161B] text-white' : 'text-[#5B6472] hover:text-[#13161B]'
+            }`}
+          >
+            Leads ({leads.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('intake')}
+            className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
+              activeTab === 'intake' ? 'bg-[#13161B] text-white' : 'text-[#5B6472] hover:text-[#13161B]'
+            }`}
+          >
+            Intake ({intakes.length})
+          </button>
+        </div>
+
+        {/* Leads Table */}
         {activeTab === 'leads' && (
-          <>
-            {stats && (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
-                <StatCard label="Total Leads" value={stats.totalLeads} icon={<Users size={18} />} />
-                <StatCard label="New" value={stats.newLeads} icon={<AlertCircle size={18} />} highlight />
-                <StatCard label="Contacted" value={stats.contactedLeads} icon={<Phone size={18} />} />
-                <StatCard label="Quoted" value={stats.quotedLeads} icon={<TrendingUp size={18} />} />
-                <StatCard label="Bound" value={stats.boundLeads} icon={<Shield size={18} />} />
-                <StatCard label="Unread Msgs" value={stats.unreadMessages} icon={<MessageSquare size={18} />} highlight={stats.unreadMessages > 0} />
-              </div>
-            )}
-
-            {/* Leads Table */}
-            <div className="bg-white border border-neutral-200 rounded-lg overflow-hidden">
-              <div className="p-6 border-b border-neutral-200">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <h2 className="text-2xl font-bold text-neutral-900">LEAD MANAGEMENT</h2>
-                  <div className="flex items-center gap-3">
-                    <div className="relative flex-1 md:flex-initial">
-                      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
-                      <input type="text" value={leadsSearch} onChange={e => { setLeadsSearch(e.target.value); setLeadsPage(1); }}
-                        placeholder="Search..." className="bg-neutral-50 border border-neutral-200 rounded-lg pl-10 pr-4 py-2 font-body text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-400 w-48" />
-                    </div>
-                    <select value={leadsStatusFilter} onChange={e => { setLeadsStatusFilter(e.target.value); setLeadsPage(1); }}
-                      className="bg-neutral-50 border border-neutral-200 rounded-lg px-4 py-2 font-body text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-400 appearance-none cursor-pointer">
-                      <option value="">All Status</option>
-                      <option value="new">New</option>
-                      <option value="contacted">Contacted</option>
-                      <option value="quoted">Quoted</option>
-                      <option value="bound">Bound</option>
-                      <option value="lost">Lost</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
+          <div className="bg-white rounded-xl border border-[rgba(19,22,27,0.08)] overflow-hidden">
+            {leads.length === 0 ? (
+              <div className="p-10 text-center text-sm text-[#5B6472]">No leads yet.</div>
+            ) : (
               <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-neutral-50">
-                    <tr className="border-b border-neutral-200">
-                      {['Name', 'Contact', 'Type', 'Status', 'Date', 'Actions'].map(h => (
-                        <th key={h} className="text-left px-6 py-3 font-body text-xs font-semibold uppercase tracking-wide text-neutral-700">{h}</th>
-                      ))}
+                <table className="w-full text-sm">
+                  <thead className="bg-[#F7F5F0] text-[#5B6472] text-xs uppercase tracking-wider">
+                    <tr>
+                      <th className="text-left px-4 py-3 font-semibold">Name</th>
+                      <th className="text-left px-4 py-3 font-semibold">Contact</th>
+                      <th className="text-left px-4 py-3 font-semibold">Type</th>
+                      <th className="text-left px-4 py-3 font-semibold">Status</th>
+                      <th className="text-left px-4 py-3 font-semibold">Date</th>
+                      <th className="text-left px-4 py-3 font-semibold">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-neutral-200">
-                    {leadsLoading ? (
-                      <tr><td colSpan={6} className="text-center py-12"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600 mx-auto" /></td></tr>
-                    ) : leads.length === 0 ? (
-                      <tr><td colSpan={6} className="text-center py-12"><p className="font-body text-sm text-neutral-500">No leads match your filters.</p></td></tr>
-                    ) : leads.map(lead => (
-                      <tr key={lead.id} className="hover:bg-neutral-50 transition-colors">
-                        <td className="px-6 py-4">
-                          <p className="font-body text-sm font-medium text-neutral-900">{lead.fullName}</p>
-                          {lead.message && <p className="font-body text-xs text-neutral-500 mt-1 max-w-[200px] truncate">{lead.message}</p>}
+                  <tbody className="divide-y divide-[rgba(19,22,27,0.06)]">
+                    {leads.map((lead) => (
+                      <tr key={lead.id} className="hover:bg-[rgba(19,22,27,0.02)]">
+                        <td className="px-4 py-3 font-medium text-[#13161B]">{lead.full_name}</td>
+                        <td className="px-4 py-3 text-[#5B6472]">
+                          <div>{lead.email}</div>
+                          <div className="text-xs">{lead.phone}</div>
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="space-y-1">
-                            <a href={`mailto:${lead.email}`} className="flex items-center gap-1.5 text-neutral-600 hover:text-primary-600 transition-colors"><Mail size={12} /><span className="font-body text-xs">{lead.email}</span></a>
-                            <a href={`tel:${lead.phone.replace(/\D/g, '')}`} className="flex items-center gap-1.5 text-neutral-600 hover:text-primary-600 transition-colors"><Phone size={12} /><span className="font-body text-xs">{lead.phone}</span></a>
+                        <td className="px-4 py-3 text-[#5B6472] capitalize">{lead.coverage_type}</td>
+                        <td className="px-4 py-3">{statusBadge(lead.status)}</td>
+                        <td className="px-4 py-3 text-xs text-[#5B6472] whitespace-nowrap">{formatDate(lead.created_at)}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            {lead.status === 'new' && (
+                              <button
+                                onClick={() => updateLeadStatus(lead.id, 'contacted')}
+                                className="text-xs px-2.5 py-1 rounded-md bg-[rgba(45,212,191,0.10)] text-[#0D9488] font-medium hover:bg-[rgba(45,212,191,0.20)] transition-colors"
+                              >
+                                Mark Contacted
+                              </button>
+                            )}
+                            {lead.status === 'contacted' && (
+                              <>
+                                <button
+                                  onClick={() => updateLeadStatus(lead.id, 'closed')}
+                                  className="text-xs px-2.5 py-1 rounded-md bg-[rgba(34,197,94,0.10)] text-[#15803D] font-medium hover:bg-[rgba(34,197,94,0.20)] transition-colors"
+                                >
+                                  Won
+                                </button>
+                                <button
+                                  onClick={() => updateLeadStatus(lead.id, 'lost')}
+                                  className="text-xs px-2.5 py-1 rounded-md bg-[rgba(239,68,68,0.08)] text-[#DC2626] font-medium hover:bg-[rgba(239,68,68,0.15)] transition-colors"
+                                >
+                                  Lost
+                                </button>
+                              </>
+                            )}
+                            <button
+                              onClick={() => deleteLead(lead.id)}
+                              className="text-xs px-2.5 py-1 rounded-md text-[#5B6472] hover:text-[#DC2626] hover:bg-[rgba(239,68,68,0.05)] transition-colors"
+                            >
+                              Delete
+                            </button>
                           </div>
-                        </td>
-                        <td className="px-6 py-4"><span className="font-body text-xs bg-primary-100 text-primary-700 px-2.5 py-1 rounded font-medium">{lead.insuranceType}</span></td>
-                        <td className="px-6 py-4">
-                          <select value={lead.status} onChange={e => updateLead.mutate({ id: lead.id, status: e.target.value as any })}
-                            className={`font-body text-xs px-2.5 py-1 rounded font-medium cursor-pointer border-0 ${statusColors[lead.status]}`}>
-                            <option value="new">New</option><option value="contacted">Contacted</option><option value="quoted">Quoted</option><option value="bound">Bound</option><option value="lost">Lost</option>
-                          </select>
-                        </td>
-                        <td className="px-6 py-4"><span className="font-body text-xs text-neutral-500">{lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : '-'}</span></td>
-                        <td className="px-6 py-4">
-                          <button onClick={() => { if (confirm('Delete this lead?')) deleteLead.mutate({ id: lead.id }); }}
-                            className="font-body text-xs text-neutral-500 hover:text-secondary-600 transition-colors">Delete</button>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-
-              {leadsPagination && leadsPagination.totalPages > 1 && (
-                <div className="px-6 py-4 border-t border-neutral-200 flex items-center justify-between">
-                  <p className="font-body text-xs text-neutral-500">Showing {(leadsPage - 1) * 10 + 1} - {Math.min(leadsPage * 10, leadsPagination.total)} of {leadsPagination.total}</p>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => setLeadsPage(p => Math.max(1, p - 1))} disabled={leadsPage === 1}
-                      className="p-2 rounded-lg border border-neutral-200 text-neutral-600 hover:text-neutral-900 hover:border-neutral-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"><ChevronLeft size={16} /></button>
-                    <span className="font-body text-sm font-medium text-neutral-900 px-3">{leadsPage} / {leadsPagination.totalPages}</span>
-                    <button onClick={() => setLeadsPage(p => Math.min(leadsPagination.totalPages, p + 1))} disabled={leadsPage === leadsPagination.totalPages}
-                      className="p-2 rounded-lg border border-neutral-200 text-neutral-600 hover:text-neutral-900 hover:border-neutral-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"><ChevronRight size={16} /></button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </>
+            )}
+          </div>
         )}
 
-        {/* ===== INTAKES TAB ===== */}
-        {activeTab === 'intakes' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Intake List */}
-            <div className="lg:col-span-2">
-              {intakeStats && (
-                <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-6">
-                  <StatCard label="Total" value={intakeStats.total} icon={<FileText size={16} />} />
-                  <StatCard label="New" value={intakeStats.new} icon={<AlertCircle size={16} />} highlight />
-                  <StatCard label="In Review" value={intakeStats.inReview} icon={<Clock size={16} />} />
-                  <StatCard label="Submitted" value={intakeStats.submittedToCarrier} icon={<ArrowUpRight size={16} />} />
-                  <StatCard label="Quoted" value={intakeStats.quoted} icon={<TrendingUp size={16} />} />
-                  <StatCard label="Bound" value={intakeStats.bound} icon={<Shield size={16} />} />
-                </div>
-              )}
-
-              <div className="bg-white border border-neutral-200 rounded-lg overflow-hidden">
-                <div className="p-6 border-b border-neutral-200">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <h2 className="text-2xl font-bold text-neutral-900">INTAKE SUBMISSIONS</h2>
-                    <div className="flex items-center gap-3">
-                      <div className="relative flex-1 md:flex-initial">
-                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
-                        <input type="text" value={intakesSearch} onChange={e => { setIntakesSearch(e.target.value); setIntakesPage(1); }}
-                          placeholder="Search..." className="bg-neutral-50 border border-neutral-200 rounded-lg pl-10 pr-4 py-2 font-body text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-400 w-48" />
-                      </div>
-                      <select value={intakesStatusFilter} onChange={e => { setIntakesStatusFilter(e.target.value); setIntakesPage(1); }}
-                        className="bg-neutral-50 border border-neutral-200 rounded-lg px-4 py-2 font-body text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-primary-400 appearance-none cursor-pointer">
-                        <option value="">All Status</option>
-                        <option value="new">New</option>
-                        <option value="in_review">In Review</option>
-                        <option value="submitted_to_carrier">Submitted to Carrier</option>
-                        <option value="quoted">Quoted</option>
-                        <option value="bound">Bound</option>
-                        <option value="declined">Declined</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-neutral-50">
-                      <tr className="border-b border-neutral-200">
-                        {['Named Insured', 'Contact', 'Lines', 'Status', 'Date', ''].map(h => (
-                          <th key={h} className="text-left px-6 py-3 font-body text-xs font-semibold uppercase tracking-wide text-neutral-700">{h}</th>
-                        ))}
+        {/* Intake Table */}
+        {activeTab === 'intake' && (
+          <div className="bg-white rounded-xl border border-[rgba(19,22,27,0.08)] overflow-hidden">
+            {intakes.length === 0 ? (
+              <div className="p-10 text-center text-sm text-[#5B6472]">No intake submissions yet.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-[#F7F5F0] text-[#5B6472] text-xs uppercase tracking-wider">
+                    <tr>
+                      <th className="text-left px-4 py-3 font-semibold">Name</th>
+                      <th className="text-left px-4 py-3 font-semibold">Contact</th>
+                      <th className="text-left px-4 py-3 font-semibold">Coverage</th>
+                      <th className="text-left px-4 py-3 font-semibold">Status</th>
+                      <th className="text-left px-4 py-3 font-semibold">Notes</th>
+                      <th className="text-left px-4 py-3 font-semibold">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[rgba(19,22,27,0.06)]">
+                    {intakes.map((intake) => (
+                      <tr key={intake.id} className="hover:bg-[rgba(19,22,27,0.02)]">
+                        <td className="px-4 py-3 font-medium text-[#13161B]">
+                          {intake.first_name} {intake.last_name}
+                        </td>
+                        <td className="px-4 py-3 text-[#5B6472]">
+                          <div>{intake.email}</div>
+                          <div className="text-xs">{intake.phone}</div>
+                        </td>
+                        <td className="px-4 py-3 text-[#5B6472]">
+                          {(intake.coverage_types || []).join(', ')}
+                        </td>
+                        <td className="px-4 py-3">{statusBadge(intake.status)}</td>
+                        <td className="px-4 py-3">
+                          <textarea
+                            defaultValue={intake.internal_notes || ''}
+                            onBlur={(e) => updateIntakeNotes(intake.id, e.target.value)}
+                            className="w-40 px-2 py-1.5 rounded-lg bg-[#F7F5F0] border border-[rgba(19,22,27,0.10)] text-xs outline-none focus:border-[#2DD4BF] resize-none"
+                            rows={2}
+                            placeholder="Add notes..."
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2 flex-wrap">
+                            {intake.status === 'pending' && (
+                              <>
+                                <button
+                                  onClick={() => updateIntakeStatus(intake.id, 'approved')}
+                                  className="text-xs px-2.5 py-1 rounded-md bg-[rgba(34,197,94,0.10)] text-[#15803D] font-medium hover:bg-[rgba(34,197,94,0.20)] transition-colors"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => updateIntakeStatus(intake.id, 'declined')}
+                                  className="text-xs px-2.5 py-1 rounded-md bg-[rgba(239,68,68,0.08)] text-[#DC2626] font-medium hover:bg-[rgba(239,68,68,0.15)] transition-colors"
+                                >
+                                  Decline
+                                </button>
+                              </>
+                            )}
+                            <button
+                              onClick={() => deleteIntake(intake.id)}
+                              className="text-xs px-2.5 py-1 rounded-md text-[#5B6472] hover:text-[#DC2626] hover:bg-[rgba(239,68,68,0.05)] transition-colors"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody className="divide-y divide-neutral-200">
-                      {intakesLoading ? (
-                        <tr><td colSpan={6} className="text-center py-12"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600 mx-auto" /></td></tr>
-                      ) : intakes.length === 0 ? (
-                        <tr><td colSpan={6} className="text-center py-12"><p className="font-body text-sm text-neutral-500">No intake forms yet.</p></td></tr>
-                      ) : intakes.map(intake => (
-                        <tr key={intake.id} onClick={() => setSelectedIntake(intake.id)}
-                          className={`cursor-pointer transition-colors ${selectedIntake === intake.id ? 'bg-primary-50' : 'hover:bg-neutral-50'}`}>
-                          <td className="px-6 py-4">
-                            <p className="font-body text-sm font-medium text-neutral-900">{intake.primaryNamedInsured}</p>
-                            {intake.occupation && <p className="font-body text-xs text-neutral-500">{intake.occupation}</p>}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="space-y-1">
-                              <p className="font-body text-xs text-neutral-500 flex items-center gap-1"><Mail size={10} /> {intake.email}</p>
-                              <p className="font-body text-xs text-neutral-500 flex items-center gap-1"><Phone size={10} /> {intake.phone}</p>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4"><span className="font-body text-xs bg-primary-100 text-primary-700 px-2.5 py-1 rounded font-medium">{intake.linesIncluded}</span></td>
-                          <td className="px-6 py-4">
-                            <span className={`text-xs px-2.5 py-1 rounded font-medium ${intakeStatusColors[intake.status]}`}>{intake.status.replace(/_/g, ' ')}</span>
-                          </td>
-                          <td className="px-6 py-4"><span className="font-body text-xs text-neutral-500">{intake.createdAt ? new Date(intake.createdAt).toLocaleDateString() : '-'}</span></td>
-                          <td className="px-6 py-4">
-                            <button onClick={e => { e.stopPropagation(); if (confirm('Delete?')) deleteIntake.mutate({ id: intake.id }); }}
-                              className="font-body text-xs text-neutral-500 hover:text-secondary-600 transition-colors">Delete</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {intakesPagination && intakesPagination.totalPages > 1 && (
-                  <div className="px-6 py-4 border-t border-neutral-200 flex items-center justify-between">
-                    <p className="font-body text-xs text-neutral-500">Showing {(intakesPage - 1) * 10 + 1} - {Math.min(intakesPage * 10, intakesPagination.total)} of {intakesPagination.total}</p>
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => setIntakesPage(p => Math.max(1, p - 1))} disabled={intakesPage === 1}
-                        className="p-2 rounded-lg border border-neutral-200 text-neutral-600 hover:text-neutral-900 hover:border-neutral-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"><ChevronLeft size={16} /></button>
-                      <span className="font-body text-sm font-medium text-neutral-900 px-3">{intakesPage} / {intakesPagination.totalPages}</span>
-                      <button onClick={() => setIntakesPage(p => Math.min(intakesPagination.totalPages, p + 1))} disabled={intakesPage === intakesPagination.totalPages}
-                        className="p-2 rounded-lg border border-neutral-200 text-neutral-600 hover:text-neutral-900 hover:border-neutral-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"><ChevronRight size={16} /></button>
-                    </div>
-                  </div>
-                )}
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </div>
-
-            {/* Intake Detail Panel */}
-            <div className="lg:col-span-1">
-              {selectedIntake && selectedIntakeData?.data ? (
-                <div className="bg-white border border-neutral-200 rounded-lg p-6 sticky top-32">
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-bold text-neutral-900">INTAKE DETAIL</h3>
-                    <button onClick={() => setSelectedIntake(null)} className="text-neutral-400 hover:text-neutral-900"><ChevronLeft size={16} /></button>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <p className="font-body text-xs font-semibold uppercase tracking-wide text-neutral-500">Named Insured</p>
-                      <p className="font-body text-sm text-neutral-900 mt-1">{selectedIntakeData.data.primaryNamedInsured}</p>
-                    </div>
-                    <div>
-                      <p className="font-body text-xs font-semibold uppercase tracking-wide text-neutral-500">Email</p>
-                      <a href={`mailto:${selectedIntakeData.data.email}`} className="font-body text-sm text-primary-600 hover:text-primary-700 transition-colors mt-1">{selectedIntakeData.data.email}</a>
-                    </div>
-                    <div>
-                      <p className="font-body text-xs font-semibold uppercase tracking-wide text-neutral-500">Phone</p>
-                      <a href={`tel:${selectedIntakeData.data.phone.replace(/\D/g, '')}`} className="font-body text-sm text-primary-600 hover:text-primary-700 transition-colors mt-1">{selectedIntakeData.data.phone}</a>
-                    </div>
-                    {selectedIntakeData.data.dob && (
-                      <div>
-                        <p className="font-body text-xs font-semibold uppercase tracking-wide text-neutral-500">DOB</p>
-                        <p className="font-body text-sm text-neutral-900 mt-1">{selectedIntakeData.data.dob}</p>
-                      </div>
-                    )}
-                    {selectedIntakeData.data.occupation && (
-                      <div>
-                        <p className="font-body text-xs font-semibold uppercase tracking-wide text-neutral-500">Occupation</p>
-                        <p className="font-body text-sm text-neutral-900 mt-1">{selectedIntakeData.data.occupation}</p>
-                      </div>
-                    )}
-                    {selectedIntakeData.data.riskAddress && (
-                      <div>
-                        <p className="font-body text-xs font-semibold uppercase tracking-wide text-neutral-500">Risk Address</p>
-                        <p className="font-body text-sm text-neutral-900 mt-1">{selectedIntakeData.data.riskAddress}</p>
-                      </div>
-                    )}
-                    {selectedIntakeData.data.linesIncluded && (
-                      <div>
-                        <p className="font-body text-xs font-semibold uppercase tracking-wide text-neutral-500">Lines</p>
-                        <p className="font-body text-sm text-neutral-900 mt-1">{selectedIntakeData.data.linesIncluded}</p>
-                      </div>
-                    )}
-
-                    {/* Status */}
-                    <div className="border-t border-neutral-200 pt-4">
-                      <p className="font-body text-xs font-semibold uppercase tracking-wide text-neutral-500 mb-2">Status</p>
-                      <select
-                        value={selectedIntakeData.data.status}
-                        onChange={e => updateIntakeStatus.mutate({ id: selectedIntakeData.data!.id, status: e.target.value as any })}
-                        className={`w-full font-body text-sm px-3 py-2 rounded cursor-pointer border-0 font-medium ${intakeStatusColors[selectedIntakeData.data.status]}`}
-                      >
-                        <option value="new">New</option>
-                        <option value="in_review">In Review</option>
-                        <option value="submitted_to_carrier">Submitted to Carrier</option>
-                        <option value="quoted">Quoted</option>
-                        <option value="bound">Bound</option>
-                        <option value="declined">Declined</option>
-                      </select>
-                    </div>
-
-                    {/* Form Data */}
-                    {!!selectedIntakeData.data.formData && (
-                      <div className="border-t border-neutral-200 pt-4">
-                        <p className="font-body text-xs font-semibold uppercase tracking-wide text-neutral-500 mb-2">Full Form Data</p>
-                        <div className="bg-neutral-50 rounded-lg p-3 max-h-[300px] overflow-y-auto">
-                          <pre className="font-mono text-xs text-neutral-600 whitespace-pre-wrap">
-                            {JSON.stringify(selectedIntakeData.data.formData as Record<string, unknown>, null, 2)}
-                          </pre>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Internal Notes */}
-                    <div className="border-t border-neutral-200 pt-4">
-                      <p className="font-body text-xs font-semibold uppercase tracking-wide text-neutral-500 mb-2">Internal Notes</p>
-                      <textarea
-                        defaultValue={selectedIntakeData.data.internalNotes || ''}
-                        onBlur={e => { if (e.target.value !== (selectedIntakeData.data!.internalNotes || '')) addIntakeNotes.mutate({ id: selectedIntakeData.data!.id, notes: e.target.value }); }}
-                        rows={3}
-                        placeholder="Add your notes here..."
-                        className="w-full bg-white border border-neutral-200 rounded-lg px-3 py-2 font-body text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none"
-                      />
-                    </div>
-
-                    <div className="border-t border-neutral-200 pt-4">
-                      <p className="font-body text-xs font-semibold uppercase tracking-wide text-neutral-500 mb-1">Submitted</p>
-                      <p className="font-body text-xs text-neutral-600 flex items-center gap-1">
-                        <Calendar size={12} />
-                        {selectedIntakeData.data.createdAt ? new Date(selectedIntakeData.data.createdAt).toLocaleString() : '-'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-white border border-neutral-200 rounded-lg p-8 text-center sticky top-32">
-                  <FileText size={32} className="text-neutral-300 mx-auto mb-3" />
-                  <p className="font-body text-sm text-neutral-500">Select an intake form to view details</p>
-                </div>
-              )}
-            </div>
+            )}
           </div>
         )}
       </main>
     </div>
-  );
-}
-
-function StatCard({ label, value, icon, highlight = false }: { label: string; value: number; icon: React.ReactNode; highlight?: boolean }) {
-  return (
-    <div className={`bg-white border rounded-lg p-4 ${highlight ? 'border-secondary-200 bg-secondary-50' : 'border-neutral-200'}`}>
-      <div className="flex items-center gap-2 mb-2">
-        <span className={highlight ? 'text-secondary-600' : 'text-primary-600'}>{icon}</span>
-        <span className="font-body text-xs font-semibold uppercase tracking-wide text-neutral-600">{label}</span>
-      </div>
-      <p className="text-2xl font-bold text-neutral-900">{value}</p>
-    </div>
-  );
+  )
 }

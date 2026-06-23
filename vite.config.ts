@@ -1,21 +1,16 @@
-import path from "path"
-import react from "@vitejs/plugin-react"
-import { defineConfig } from "vite"
-
-const __dirname = import.meta.dirname
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { resolve } from 'path'
 
 export default defineConfig({
   plugins: [react()],
-  server: {
-    port: 3000,
-  },
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      '@': resolve(__dirname, 'src'),
+      '@sections': resolve(__dirname, 'src/sections'),
+      '@pages': resolve(__dirname, 'src/pages'),
+      '@lib': resolve(__dirname, 'src/lib'),
+      '@components': resolve(__dirname, 'src/components'),
     },
-  },
-  build: {
-    outDir: path.resolve(__dirname, "dist"),
-    emptyOutDir: true,
   },
 })
