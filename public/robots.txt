@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://paul-williams-insurance.pages.dev/sitemap.xml
