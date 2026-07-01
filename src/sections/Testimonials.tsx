@@ -39,14 +39,14 @@ const featuredReviews = [
     name: 'Sandra T.',
     location: 'Mount Dora, FL',
     rating: 5,
-    text: "Highly recommended! Farmers Insurance through Paul Williams saved me over $600 this year on my homeowners insurance over my previous carrier.",
+    text: "Highly recommended! Paul Williams saved me over $600 this year on my homeowners insurance over my previous carrier.",
     source: 'Yellow Pages',
   },
   {
     name: 'David M.',
     location: 'Eustis, FL',
     rating: 5,
-    text: "Serving the Mount Dora area since 2019, Paul helped me understand my coverage options so I could protect what matters most. Outstanding customer service.",
+    text: "Serving the Mount Dora area for years, Paul helped me understand my coverage options so I could protect what matters most. Outstanding customer service.",
     source: 'Google Review',
   },
 ];

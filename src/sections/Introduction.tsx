@@ -157,7 +157,7 @@ export default function Introduction() {
                 CALL PAUL DIRECTLY
               </p>
               <a
-                href="tel:+1-407-791-0227"
+                href="tel:4077910227"
                 className="font-display text-[48px] md:text-[60px] text-[#F0F2F5] hover:text-crimson transition-colors leading-none"
               >
                 (407) 791-0227
@@ -165,6 +165,15 @@ export default function Introduction() {
               <p className="font-body text-sm text-mist mt-2">
                 I'll be happy to answer any questions and provide a quote.
               </p>
+            </div>
+
+            {/* Paul's professional signature block */}
+            <div className="mb-12">
+              <img
+                src="/img-paul-signature.jpg"
+                alt="Paul Williams — Florida's Most Trusted Independent Insurance Agent"
+                className="w-full max-w-[600px] rounded-lg border border-dark-mist"
+              />
             </div>
 
             <div ref={valuesRef} className="space-y-6">

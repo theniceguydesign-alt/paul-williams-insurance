@@ -30,8 +30,9 @@ export default function Footer() {
               PW<span className="text-crimson">.</span>
             </a>
             <p className="font-body text-sm text-gray-600 leading-relaxed mb-6">
-              Your trusted Farmers Insurance agent in Mount Dora, FL. Protecting
-              what matters most since 2019.
+              Your Most Trusted Independent Insurance Agent in Mount Dora, FL.
+              The Insurance Rebel — protecting what matters most for over 20
+              years.
             </p>
             <div className="flex items-center gap-4">
               <a
@@ -72,16 +73,7 @@ export default function Footer() {
                   </a>
                 </li>
               ))}
-              <li>
-                <a
-                  href="https://agents.farmers.com/fl/mount-dora/paul-williams"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-body text-base text-void hover:text-brand-blue transition-colors duration-200"
-                >
-                  Farmers Profile
-                </a>
-              </li>
+
             </ul>
           </div>
 
@@ -93,7 +85,7 @@ export default function Footer() {
             <ul className="space-y-4">
               <li>
                 <a
-                  href="tel:+1-407-791-0227"
+                  href="tel:4077910227"
                   className="flex items-center gap-3 text-void hover:text-brand-blue transition-colors"
                 >
                   <Phone size={16} className="text-brand-blue flex-shrink-0" />
@@ -102,12 +94,12 @@ export default function Footer() {
               </li>
               <li>
                 <a
-                  href="mailto:pwilliams3@farmersagent.com"
+                  href="mailto:paul@paulwilliamsinsurance.com"
                   className="flex items-center gap-3 text-void hover:text-brand-blue transition-colors"
                 >
                   <Mail size={16} className="text-brand-blue flex-shrink-0" />
                   <span className="font-body text-sm">
-                    pwilliams3@farmersagent.com
+                    paul@paulwilliamsinsurance.com
                   </span>
                 </a>
               </li>
@@ -118,9 +110,9 @@ export default function Footer() {
                     className="text-brand-blue flex-shrink-0 mt-0.5"
                   />
                   <span className="font-body text-sm">
-                    6551 N Orange Blossom Trl
+                    2110 N Donnelly St. Ste 110
                     <br />
-                    Ste 105, Mount Dora, FL 32757
+                    Mount Dora, FL 32757
                   </span>
                 </div>
               </li>
@@ -167,7 +159,7 @@ export default function Footer() {
         <div className="max-w-[1344px] mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <p className="font-body text-[12px] text-gray-500 text-center md:text-left">
             &copy; 2025 Paul Williams Insurance Agency. All Rights Reserved.
-            Licensed Farmers Insurance Agent.
+            Independent Insurance Agent.
           </p>
           <p className="font-body text-[12px] text-gray-500">
             Mount Dora, FL 32757
