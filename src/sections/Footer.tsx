@@ -165,6 +165,14 @@ export default function Footer() {
             Mount Dora, FL 32757
           </p>
         </div>
+        <div className="max-w-[1344px] mx-auto px-6 pt-2">
+          <a
+            href="mailto:crestlakestudio@gmail.com"
+            className="font-body text-[10px] text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            Built by Crestlake Studio
+          </a>
+        </div>
       </div>
     </footer>
   );
