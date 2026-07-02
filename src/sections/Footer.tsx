@@ -167,7 +167,7 @@ export default function Footer() {
         </div>
         <div className="max-w-[1344px] mx-auto px-6 pt-2">
           <a
-            href="mailto:crestlakestudio@gmail.com"
+            href="mailto:theniceguy.design@gmail.com"
             className="font-body text-[10px] text-gray-400 hover:text-gray-600 transition-colors"
           >
             Built by Crestlake Studio
