@@ -49,6 +49,15 @@ module.exports = {
           900: '#1A1A1A',
           950: '#0F0F0F',
         },
+        // Brand palette (Paul Williams Insurance — dark "Insurance Rebel" theme)
+        void: '#0A0E1A',
+        midnight: '#121A2E',
+        glass: '#0A0E1A',
+        crimson: '#C8102E',
+        'arabian-red': '#9E0C24',
+        mist: '#9AA7BC',
+        'dark-mist': '#2A3448',
+        'brand-blue': '#3B82F6',
         // CSS var colors
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -74,7 +83,7 @@ module.exports = {
       },
       fontFamily: {
         body: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-        display: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        display: ['"Bebas Neue"', 'Inter', 'system-ui', 'sans-serif'],
       },
       fontSize: {
         xs: ['0.8125rem', '1rem'],
@@ -104,6 +113,7 @@ module.exports = {
         md: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
         lg: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
         xl: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+        'crimson-glow': '0 10px 40px -10px rgba(200, 16, 46, 0.45)',
       },
       spacing: {
         xs: '0.25rem',
@@ -121,10 +131,15 @@ module.exports = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        "pulse-line": {
+          "0%, 100%": { transform: "scaleY(0.3)", opacity: "0.4" },
+          "50%": { transform: "scaleY(1)", opacity: "1" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "pulse-line": "pulse-line 2s ease-in-out infinite",
       },
     },
   },
